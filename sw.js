@@ -1,5 +1,5 @@
-// Service Worker para Garland Taxi - Optimizado para GitHub Pages
-const CACHE_NAME = 'garland-taxi-v3';
+// Service Worker optimizado para GitHub Pages subfolder
+const CACHE_NAME = 'garland-taxi-v4';
 const urlsToCache = [
   '/garlandtext-taxi/',
   '/garlandtext-taxi/index.html',
@@ -11,102 +11,62 @@ const urlsToCache = [
   'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;700&display=swap'
 ];
 
-// Instalar Service Worker
+// Instalar
 self.addEventListener('install', event => {
-  console.log('Service Worker: Installing...');
+  console.log('[Service Worker] Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Service Worker: Caching archivos');
+        console.log('[Service Worker] Caching app shell');
         return cache.addAll(urlsToCache);
       })
-      .then(() => {
-        console.log('Service Worker: Instalación completada');
-        return self.skipWaiting();
-      })
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activar Service Worker
+// Activar
 self.addEventListener('activate', event => {
-  console.log('Service Worker: Activando...');
+  console.log('[Service Worker] Activating...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Service Worker: Eliminando cache antiguo', cacheName);
+            console.log('[Service Worker] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    }).then(() => {
-      console.log('Service Worker: Activación completada');
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
-// Interceptar solicitudes
+// Fetch
 self.addEventListener('fetch', event => {
-  // Excluir solicitudes de chrome-extension y otras especiales
-  if (event.request.url.includes('chrome-extension')) {
-    return;
-  }
-
+  // No cachear chrome-extension
+  if (event.request.url.startsWith('chrome-extension://')) return;
+  
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Si encontramos en cache, devolver
         if (response) {
           return response;
         }
-
-        // Clonar la solicitud
-        const fetchRequest = event.request.clone();
-
-        // Intentar obtener de la red
-        return fetch(fetchRequest)
-          .then(response => {
-            // Verificar respuesta válida
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-
-            // Clonar respuesta para cache
-            const responseToCache = response.clone();
-
-            // Almacenar en cache
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-
+        
+        return fetch(event.request).then(response => {
+          // Solo cachear respuestas válidas
+          if (!response || response.status !== 200 || response.type !== 'basic') {
             return response;
-          })
-          .catch(() => {
-            // Para solicitudes de navegación, devolver página offline
-            if (event.request.mode === 'navigate') {
-              return caches.match('/garlandtext-taxi/index.html');
-            }
-            
-            // Para imágenes, devolver placeholder
-            if (event.request.url.match(/\.(jpg|jpeg|png|gif)$/)) {
-              return new Response(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#FFD700"/><text x="200" y="150" font-family="Arial" font-size="24" fill="#000" text-anchor="middle" dominant-baseline="middle">Garland Taxi</text></svg>',
-                {
-                  headers: { 'Content-Type': 'image/svg+xml' }
-                }
-              );
-            }
-          });
+          }
+          
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => {
+              cache.put(event.request, responseToCache);
+            });
+          
+          return response;
+        });
       })
   );
-});
-
-// Manejar mensajes desde la página principal
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });
